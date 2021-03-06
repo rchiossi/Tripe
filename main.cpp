@@ -22,7 +22,6 @@ class Renderer {
 
     private:
     sf::RenderWindow& mWindow;
-    sf::Time mAccumulatedTimeMs;
     sf::Int32 mFramerate;
 
     std::unordered_map<sf::Int32, Object&> mObjects;
@@ -32,26 +31,30 @@ Renderer::Renderer(sf::RenderWindow& window, sf::Int32 framerate)
     : mWindow{window}
     , mFramerate{framerate}
 {
-    mAccumulatedTimeMs = sf::milliseconds(0);
 
 }
 
 void Renderer::Render() {
-    mWindow.clear();
+    mWindow.setActive(true);
 
-    for (auto& pair : mObjects) {
-        pair.second.Draw(mWindow);
-    }
+    sf::Clock clock;
+    sf::Time accumulatedTimeMs = sf::milliseconds(0);
+    while (mWindow.isOpen()) {
+        accumulatedTimeMs += clock.restart();
 
-    mWindow.display();
-}
+        if (accumulatedTimeMs >= sf::milliseconds(1000 / mFramerate)) {
+            accumulatedTimeMs = sf::milliseconds(1000 % mFramerate);
 
-void Renderer::Update(sf::Time elapsedTimeMs) {
-    mAccumulatedTimeMs += elapsedTimeMs;
+            mWindow.clear(sf::Color::Black);
 
-    if (mAccumulatedTimeMs >= sf::milliseconds(1000 / mFramerate)) {
-        mAccumulatedTimeMs = sf::milliseconds(1000 % mFramerate);
-        Render();
+            for (auto& pair : mObjects) {
+                pair.second.Draw(mWindow);
+            }
+
+            mWindow.display();
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 }
 
@@ -141,7 +144,10 @@ void ColorfulCircle::Update(sf::Time elapsedTimeMs) {
 }
 
 int main(int argc, char* argv[]) {
-    sf::RenderWindow window(sf::VideoMode(200, 200), "Tripe");
+    sf::RenderWindow window;
+    window.create(sf::VideoMode(200, 200), "Tripe");
+    window.setVerticalSyncEnabled(true);
+    window.setActive(false);
 
     Renderer renderer(window, 60);
     GameState state;
@@ -150,6 +156,8 @@ int main(int argc, char* argv[]) {
 
     renderer.RegisterObject(circle);
     state.RegisterObject(circle);
+
+    std::thread renderThread(&Renderer::Render, &renderer);
 
     sf::Clock clock;
     while (window.isOpen()) {
@@ -163,10 +171,11 @@ int main(int argc, char* argv[]) {
         sf::Time elapsed = clock.restart();
 
         state.Update(elapsed);
-        renderer.Update(elapsed);
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
+
+    renderThread.join();
 
     return 0;
 }
